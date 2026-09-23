@@ -53,6 +53,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>PT-2 // LOCK IN</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Special+Elite&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -97,6 +99,7 @@ h1{margin:0;font-family:Georgia,serif;font-size:clamp(38px,7vw,74px);letter-spac
 .topGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:14px}
 .sectionHead{padding:15px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
 .sectionHead h2{font:800 13px ui-monospace,monospace;letter-spacing:.13em;margin:0;color:var(--orange);text-transform:uppercase}
+.sectionHeadActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.syllabusVisibilityBtn{white-space:nowrap;border-color:var(--orange);color:var(--orange2);background:var(--soft)}.syllabusVisibilityBtn.active-filter{box-shadow:0 0 18px color-mix(in srgb,var(--orange) 16%,transparent)}
 .badge{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:4px 8px;font:700 10px ui-monospace,monospace;color:var(--orange2)}
 .timerWrap{display:grid;grid-template-columns:1fr 1fr;min-height:320px}
 .timerFace{display:grid;place-items:center;padding:28px;position:relative;border-right:1px solid var(--line)}
@@ -2595,7 +2598,7 @@ html.live-viewer-mode #liveViewerRoot{display:block!important}
 
 
 <section class="panel mainSection">
-    <div class="sectionHead"><h2>PT-2 Syllabus</h2><span class="badge" id="syllabusMood">CHECK TO CLIMB</span></div>
+    <div class="sectionHead"><h2>PT-2 Syllabus</h2><div class="sectionHeadActions"><span class="badge" id="syllabusMood">CHECK TO CLIMB</span><button class="btn syllabusVisibilityBtn" id="toggleSyllabusAllTop" type="button">HIDE ALL</button></div></div>
     
 <div class="syllabusArchiveNotice" id="syllabusArchiveNotice">
   <span class="archiveDot"></span>
@@ -3008,7 +3011,7 @@ function awardTodoXp(todo){if(!todo||!todo.done||todo.id&&state.todoXpAwards[tod
 function renderXp(){const level=levelFromXp(state.xp),base=(level-1)*500,next=level*500,within=state.xp-base,pct=Math.min(100,within/500*100);const rank=document.getElementById('levelDisplay');const xp=document.getElementById('xpDisplay');const nextEl=document.getElementById('xpNext');const fill=document.getElementById('xpFill');const current=document.getElementById('xpCurrent');const title=document.getElementById('xpTitle');if(rank)rank.textContent=`LEVEL ${level}`;if(xp)xp.textContent=`${state.xp.toLocaleString()} XP`;if(nextEl)nextEl.textContent=`${next-state.xp>0?(next-state.xp)+' XP TO LEVEL '+(level+1):'LEVEL READY'}`;if(fill)fill.style.width=pct+'%';if(current)current.textContent=`${within.toLocaleString()} / 500 XP`;if(title)title.textContent=levelTitle(level)}
 function renderSyllabus(){
  const q=document.getElementById('search').value.trim().toLowerCase(); const filter=window.filterMode||'all';
- const host=document.getElementById('syllabus'); host.innerHTML=''; host.classList.toggle('syllabusHidden',!!state.syllabusHidden); const hideBtn=document.getElementById('toggleSyllabusAll'); if(hideBtn){hideBtn.textContent=state.syllabusHidden?'SHOW ALL':'HIDE ALL';hideBtn.classList.toggle('active-filter',state.syllabusHidden);} let visible=0;
+ const host=document.getElementById('syllabus'); host.innerHTML=''; host.classList.toggle('syllabusHidden',!!state.syllabusHidden); document.querySelectorAll('#toggleSyllabusAll,#toggleSyllabusAllTop').forEach(b=>{b.textContent=state.syllabusHidden?'SHOW ALL':'HIDE ALL';b.classList.toggle('active-filter',state.syllabusHidden);}); let visible=0;
  const visibleSyllabus=activeSyllabus();visibleSyllabus.forEach(sec=>{const matching=sec.items.filter(([id,text,meta])=>{const hit=!q||(text+' '+meta+' '+sec.title).toLowerCase().includes(q);const done=effectiveDone(id,meta);const fm=filter==='all'||(filter==='open'&&!done)||(filter==='done'&&done);return hit&&fm}); if(!matching.length)return; visible+=matching.length;
   const box=document.createElement('div'); box.className='subject'; const head=document.createElement('div'); head.className='subjectHead'; const done=sec.items.filter(x=>effectiveDone(x[0],x[2])).length; const total=sec.items.length; head.innerHTML=`<strong>${esc(sec.title)}</strong><span>${done}/${total}</span>`; box.appendChild(head);
   const items=document.createElement('div'); items.className='items'; matching.forEach(([id,text,meta])=>{const label=document.createElement('label');label.className='item'+(state.checked[id]?' done':''); const ex=isExcluded(meta); label.innerHTML=`<input type="checkbox" ${effectiveDone(id,meta)?'checked':''}><div class="txt">${esc(text)}<span class="meta">${esc(meta)}${ex?'<span class="tag ex">OPTIONAL</span>':''}</span></div><span class="revisionItem"><button type="button" class="btn revisionBtn" title="Award revision XP and coins" ${state.checked[id]?'':'disabled'}>${state.revisionAwards[id]===revisionDayKey()?'REVISED':'REV +35'}</button></span>`; const cb=label.querySelector('input'); const rev=label.querySelector('.revisionBtn'); cb.addEventListener('change',()=>{state.checked[id]=cb.checked;state.currentTask=text;awardSyllabusXp(id,meta,text,cb.checked);awardSyllabusCoins(id,meta,text,cb.checked);save();update();}); rev.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(awardRevision(id,meta,text))update();}); label.addEventListener('click',e=>{if(e.target.tagName!=='INPUT'&&e.target.tagName!=='BUTTON'){state.currentTask=text;save();document.getElementById('currentTask').textContent=text}}); label.addEventListener('contextmenu',e=>showTaskMenu(e,text)); items.appendChild(label)}); box.appendChild(items); host.appendChild(box);
@@ -3456,8 +3459,8 @@ document.getElementById('bottomShopBtn').onclick=()=>openUtilityDetail('shop');
 document.getElementById('bottomPortabilityBtn').onclick=()=>openUtilityDetail('port');
 document.getElementById('addTodo').onclick=addTodo;document.getElementById('todoInput').addEventListener('keydown',e=>{if(e.key==='Enter')addTodo()});
 function setFilter(mode){window.filterMode=mode;document.querySelectorAll('#showAll,#showOpen,#showDone').forEach(button=>button.classList.toggle('active-filter',button.id==='show'+mode[0].toUpperCase()+mode.slice(1)));renderSyllabus()}
-function setSyllabusVisibility(hidden){state.syllabusHidden=!!hidden;save();renderSyllabus();const b=document.getElementById('toggleSyllabusAll');if(b){b.textContent=state.syllabusHidden?'SHOW ALL':'HIDE ALL';b.classList.toggle('active-filter',state.syllabusHidden);}}
-document.getElementById('search').addEventListener('input',renderSyllabus);document.getElementById('showAll').onclick=()=>setFilter('all');document.getElementById('showOpen').onclick=()=>setFilter('open');document.getElementById('showDone').onclick=()=>setFilter('done');document.getElementById('toggleSyllabusAll').onclick=()=>setSyllabusVisibility(!state.syllabusHidden);
+function setSyllabusVisibility(hidden){state.syllabusHidden=!!hidden;save();renderSyllabus();document.querySelectorAll('#toggleSyllabusAll,#toggleSyllabusAllTop').forEach(b=>{b.textContent=state.syllabusHidden?'SHOW ALL':'HIDE ALL';b.classList.toggle('active-filter',state.syllabusHidden);});}
+document.getElementById('search').addEventListener('input',renderSyllabus);document.getElementById('showAll').onclick=()=>setFilter('all');document.getElementById('showOpen').onclick=()=>setFilter('open');document.getElementById('showDone').onclick=()=>setFilter('done');document.querySelectorAll('#toggleSyllabusAll,#toggleSyllabusAllTop').forEach(b=>b.onclick=()=>setSyllabusVisibility(!state.syllabusHidden));
 document.getElementById('checkAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=true));save();update()};document.getElementById('uncheckAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=false));save();update()};document.getElementById('resetProgress').onclick=()=>{if(confirm('Reset all syllabus progress?')){state.checked={};state.autoExamApplied={};state.missionHistory=[];state.mission={date:'',id:'',rerolls:0,exam:'',examDate:''};state.revisionAwards={};state.revisionLog=[];save();update()}};
 
 
