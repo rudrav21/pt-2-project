@@ -1,0 +1,133 @@
+name: LOCK IN timer upgrade
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  upgrade:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upgrade timer
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+
+          # State: preserve all existing state and add only timer-upgrade fields.
+          anchor="state.timer ||= {mode:'focus',remaining:1500,running:false,endAt:0};"
+          repl="state.timer ||= {mode:'focus',remaining:1500,running:false,endAt:0}; state.timer.preset ||= 'classic'; state.timer.smartPreset ||= '50-10'; state.timer.stopwatchRewards ||= {};"
+          if anchor not in s: raise SystemExit('state anchor not found')
+          s=s.replace(anchor,repl,1)
+
+          # Timer presets. Classic modes remain untouched; Smart Pomodoro is additive.
+          old="const durations={focus:1500,short:300,long:900,stopwatch:0};"
+          new="""const durations={focus:1500,short:300,long:900,stopwatch:0};
+const smartPomodoroPresets={
+  '25-5':{label:'25 / 5',focus:1500,break:300},
+  '50-10':{label:'50 / 10',focus:3000,break:600},
+  '75-15':{label:'75 / 15',focus:4500,break:900},
+  '90-20':{label:'90 / 20',focus:5400,break:1200}
+};
+const stopwatchRewardTiers=[
+  {min:10,xp:10,coins:5,label:'10 MIN SPRINT'},
+  {min:25,xp:25,coins:10,label:'25 MIN SPRINT'},
+  {min:50,xp:50,coins:20,label:'50 MIN SPRINT'},
+  {min:90,xp:90,coins:35,label:'90 MIN SPRINT'}
+];
+function smartPreset(){return smartPomodoroPresets[state.timer.smartPreset]||smartPomodoroPresets['50-10']}
+function stopwatchRewardFor(seconds){
+  const minutes=Math.floor(Math.max(0,seconds)/60);
+  let tier=null; for(const t of stopwatchRewardTiers) if(minutes>=t.min) tier=t;
+  return tier;
+}
+function stopwatchRewardKey(seconds){const tier=stopwatchRewardFor(seconds);return tier?`${tier.min}m`:'under-10m'}
+function awardStopwatchReward(seconds){
+  const tier=stopwatchRewardFor(seconds); if(!tier)return {xp:0,coins:0,label:'UNDER 10 MIN // NO REWARD'};
+  const key=stopwatchRewardKey(seconds); state.timer.stopwatchRewards ||= {};
+  if(state.timer.stopwatchRewards[key])return {xp:0,coins:0,label:`${tier.label} ALREADY CLAIMED`};
+  state.timer.stopwatchRewards[key]={claimedAt:Date.now(),seconds};
+  awardXp(tier.xp,'stopwatch',`STOPWATCH // ${tier.label}`); state.coins+=tier.coins;
+  return {xp:tier.xp,coins:tier.coins,label:tier.label};
+}
+function setSmartPreset(key,autostart=false){
+  const preset=smartPomodoroPresets[key]; if(!preset)return;
+  clearInterval(timer.interval); timer.running=false; state.timer.preset='smart'; state.timer.smartPreset=key; timer.mode='focus'; timer.remaining=preset.focus; timer.startedAt=0; saveTimer(); renderSmartPomodoro(); updateClockUI();
+  if(autostart)startTimer();
+}
+function renderSmartPomodoro(){
+  const preset=smartPreset(); const label=document.getElementById('smartPresetLabel'); if(label)label.textContent=`SMART ${preset.label}`;
+  document.querySelectorAll('[data-smart-preset]').forEach(b=>b.classList.toggle('active',b.dataset.smartPreset===state.timer.smartPreset));
+}
+"""
+          if old not in s: raise SystemExit('durations anchor not found')
+          s=s.replace(old,new,1)
+
+          # Replace setMode so selecting classic modes exits smart mode cleanly.
+          old="function setMode(mode,autostart=false){clearInterval(timer.interval);timer.mode=mode;timer.running=false;timer.remaining=durations[mode];timer.startedAt=0;saveTimer();document.querySelectorAll('#modes .btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));updateClockUI();if(autostart)startTimer()}"
+          new="function setMode(mode,autostart=false){clearInterval(timer.interval);timer.mode=mode;timer.running=false;state.timer.preset='classic';timer.remaining=durations[mode];timer.startedAt=0;saveTimer();document.querySelectorAll('#modes .btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));renderSmartPomodoro();updateClockUI();if(autostart)startTimer()}"
+          if old not in s: raise SystemExit('setMode anchor not found')
+          s=s.replace(old,new,1)
+
+          # Stopwatch completion: reward only on a genuine reset/stop after a completed threshold.
+          old="function resetTimer(){clearInterval(timer.interval);timer.running=false;timer.remaining=durations[timer.mode];timer.startedAt=0;saveTimer();updateClockUI()}"
+          new="""function resetTimer(){
+  clearInterval(timer.interval); const wasRunning=timer.running; const elapsed=timer.mode==='stopwatch'?timer.remaining:0;
+  timer.running=false;
+  if(timer.mode==='stopwatch' && wasRunning && elapsed>=600){const reward=awardStopwatchReward(elapsed);save();showToast(`STOPWATCH BANKED // ${Math.floor(elapsed/60)} MIN // +${reward.xp} XP // +${reward.coins} COINS`);playSfx('complete');}
+  timer.remaining=durations[timer.mode];timer.startedAt=0;saveTimer();update();
+}"""
+          if old not in s: raise SystemExit('resetTimer anchor not found')
+          s=s.replace(old,new,1)
+
+          # Pause is also a legitimate way to bank a stopwatch session; reward once per tier.
+          old="function pauseTimer(){timer.running=false;clearInterval(timer.interval);if(timer.mode==='stopwatch'&&timer.remaining){state.sessions.unshift({type:'STOPWATCH',seconds:timer.remaining,at:Date.now()});state.sessions=state.sessions.slice(0,180)}saveTimer();update();}"
+          new="""function pauseTimer(){timer.running=false;clearInterval(timer.interval);if(timer.mode==='stopwatch'&&timer.remaining){state.sessions.unshift({type:'STOPWATCH',seconds:timer.remaining,at:Date.now()});state.sessions=state.sessions.slice(0,180);if(timer.remaining>=600){const reward=awardStopwatchReward(timer.remaining);if(reward.xp||reward.coins){showToast(`STOPWATCH REWARD // +${reward.xp} XP // +${reward.coins} COINS`);playSfx('complete')}}}saveTimer();update();}"""
+          if old not in s: raise SystemExit('pauseTimer anchor not found')
+          s=s.replace(old,new,1)
+
+          # Smart focus completion uses selected focus/break lengths without breaking classic flow.
+          old="function finishTimer(){clearInterval(timer.interval);const completedMode=timer.mode;timer.running=false;timer.remaining=0;if(completedMode==='focus'){"
+          new="function finishTimer(){clearInterval(timer.interval);const completedMode=timer.mode;timer.running=false;timer.remaining=0;if(completedMode==='focus'){"
+          if old not in s: raise SystemExit('finishTimer anchor not found')
+          # Inject smart duration accounting immediately after the existing focus bookkeeping starts.
+          needle="state.smartDaily.focusMinutes+=Math.max(1,Math.round(durations.focus/60));"
+          if needle not in s: raise SystemExit('focus duration anchor not found')
+          s=s.replace(needle,"state.smartDaily.focusMinutes+=Math.max(1,Math.round((state.timer.preset==='smart'?smartPreset().focus:durations.focus)/60));",1)
+
+          # Change the focus session duration recorded/rewarded when Smart mode is active.
+          s=s.replace("state.sessions.unshift({type:'FOCUS',seconds:durations.focus,at:Date.now()});","state.sessions.unshift({type:'FOCUS',seconds:(state.timer.preset==='smart'?smartPreset().focus:durations.focus),at:Date.now()});",1)
+          s=s.replace("const next=state.rounds%4===0?'long':'short';setMode(next,state.settings.autoStart);","const next=state.timer.preset==='smart'?'smartBreak':(state.rounds%4===0?'long':'short'); if(next==='smartBreak'){timer.mode='short';timer.remaining=smartPreset().break;timer.running=false;timer.startedAt=0;saveTimer();updateClockUI();if(state.settings.autoStart)startTimer();}else setMode(next,state.settings.autoStart);",1)
+
+          # Add Smart Pomodoro UI beside existing modes.
+          marker='          <button class="btn" data-mode="stopwatch">STOPWATCH</button>\n          </div>'
+          addition='''          <button class="btn" data-mode="stopwatch">STOPWATCH</button>\n          </div>\n          <div class="smartPomoBox">\n            <div class="smartPomoHead"><span>SMART POMODORO</span><b id="smartPresetLabel">SMART 50 / 10</b></div>\n            <div class="smartPomoChoices">\n              <button class="btn" type="button" data-smart-preset="25-5">25 / 5</button>\n              <button class="btn active" type="button" data-smart-preset="50-10">50 / 10</button>\n              <button class="btn" type="button" data-smart-preset="75-15">75 / 15</button>\n              <button class="btn" type="button" data-smart-preset="90-20">90 / 20</button>\n            </div>\n            <div class="smartPomoHint">FOCUS LENGTH → BREAK LENGTH // AUTO-SWITCHES AFTER A COMPLETED FOCUS</div>\n          </div>'''
+          if marker not in s: raise SystemExit('mode button marker not found')
+          s=s.replace(marker,addition,1)
+
+          # Add CSS for the new panel.
+          css='''.smartPomoBox{margin-top:14px;padding:11px;border:1px solid var(--line);border-radius:11px;background:linear-gradient(135deg,var(--soft),rgba(255,255,255,.012));position:relative;overflow:hidden}.smartPomoHead{display:flex;justify-content:space-between;gap:10px;align-items:center;font:800 9px "DM Mono",monospace;letter-spacing:.09em;color:var(--muted)}.smartPomoHead b{color:var(--orange2)}.smartPomoChoices{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}.smartPomoChoices .btn{min-height:30px;padding:5px 4px;font-size:8px}.smartPomoChoices .btn.active{background:var(--soft);border-color:var(--orange2);color:var(--orange2);box-shadow:0 0 14px var(--soft)}.smartPomoHint{margin-top:7px;color:var(--muted);font:700 7px/1.4 "DM Mono",monospace;letter-spacing:.05em}@media(max-width:600px){.smartPomoChoices{grid-template-columns:repeat(2,1fr)}}\n'''
+          if '.smartPomoBox{' not in s:
+            pos=s.find('</style>')
+            s=s[:pos]+css+s[pos:]
+
+          # Wire smart preset buttons and initialize the UI without disturbing classic mode buttons.
+          wire="document.getElementById('startBtn').onclick=startTimer;document.getElementById('pauseBtn').onclick=pauseTimer;document.getElementById('resetBtn').onclick=resetTimer;"
+          wire2=wire+"document.querySelectorAll('[data-smart-preset]').forEach(b=>b.onclick=()=>setSmartPreset(b.dataset.smartPreset));renderSmartPomodoro();"
+          if wire not in s: raise SystemExit('timer button wiring not found')
+          s=s.replace(wire,wire2,1)
+
+          p.write_text(s,encoding='utf-8')
+      - name: Commit completed upgrade
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/lockin-timer-upgrade.yml
+          git add index.html
+          git diff --cached --check
+          git commit -m "[skip ci] Add Smart Pomodoro and stopwatch rewards"
+          git push origin HEAD:main
