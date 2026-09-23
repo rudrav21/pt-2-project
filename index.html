@@ -225,7 +225,7 @@ body:after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opac
 .item{transition:transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease)}.item:hover{transform:translateX(4px);border-color:color-mix(in srgb,var(--orange) 28%,transparent);background:linear-gradient(90deg,var(--soft),transparent)}.item input{cursor:pointer}.item.done{animation:checkIn .3s var(--ease)}@keyframes checkIn{0%{transform:scale(.985)}60%{transform:scale(1.012)}100%{transform:scale(1)}}
 .todoItem:hover{transform:translateX(4px);border-color:color-mix(in srgb,var(--orange) 40%,transparent);background:linear-gradient(90deg,var(--soft),rgba(255,255,255,.018))}.x{transition:color .15s,transform .15s}.x:hover{color:var(--red);transform:scale(1.2)}
 .toolbar{position:sticky;top:0;z-index:5;background:rgba(10,10,9,.92);backdrop-filter:blur(12px)}.toolbar .btn.active-filter{color:#120c05;background:var(--orange2);border-color:var(--orange2);box-shadow:0 0 18px var(--soft)}
-.progress{position:relative}.progressFill{display:flex!important;overflow:hidden}
+.progress{position:relative}.progressFill{display:flex!important;overflow:hidden;position:relative;transition:width .7s cubic-bezier(.22,1,.36,1),filter .25s ease,box-shadow .35s ease}.progressFill.progress-live{box-shadow:0 0 16px color-mix(in srgb,var(--orange) 24%,transparent),0 0 36px color-mix(in srgb,var(--orange) 10%,transparent)}.progressFill.progress-live:before{content:"";position:absolute;inset:0 auto 0 -35%;width:35%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.38),transparent);animation:progressSweep 2.7s linear infinite;pointer-events:none}.progressFill.progress-live:after{content:"";position:absolute;top:50%;right:-4px;width:10px;height:10px;transform:translateY(-50%);border-radius:50%;background:var(--orange2);box-shadow:0 0 8px var(--orange2),0 0 18px var(--orange);animation:progressPulse 1.6s ease-in-out infinite}@keyframes progressSweep{to{left:110%}}@keyframes progressPulse{0%,100%{opacity:.65;transform:translateY(-50%) scale(.8)}50%{opacity:1;transform:translateY(-50%) scale(1.15)}}
 /* XP / Level system */
 .xpPanel{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,var(--soft),rgba(255,255,255,.012));overflow:hidden;position:relative}
 .xpPanel:after{content:"XP";position:absolute;right:10px;top:-10px;color:color-mix(in srgb,var(--orange) 10%,transparent);font:400 72px/.8 "Bebas Neue",sans-serif;pointer-events:none}
@@ -3293,7 +3293,9 @@ function update(){
   syncCompletedExamChecks();
   let total=0,done=0;
   const totals={easy:0,medium:0,hard:0,optional:0},completed={easy:0,medium:0,hard:0,optional:0};
-  activeSyllabus().forEach(sec=>sec.items.forEach(([id,,meta])=>{
+  // Progress is global: archived sections remain part of the syllabus and
+  // therefore remain part of the completion calculation.
+  syllabus.forEach(sec=>sec.items.forEach(([id,,meta])=>{
     const level=difficultyFor(meta); total++; totals[level]++;
     if(effectiveDone(id,meta)){done++; completed[level]++;}
   }));
@@ -3307,6 +3309,8 @@ function update(){
   if(fill){
     fill.style.width=pct+'%';
     fill.style.background=`linear-gradient(90deg,#74e6a2 0 ${easyStop}%,#ffbd58 ${easyStop}% ${mediumStop}%,#ff7067 ${mediumStop}% ${hardStop}%,#aaa49c ${hardStop}% 100%)`;
+    fill.classList.toggle('progress-live',pct>0);
+    fill.setAttribute('aria-label',`Syllabus completion ${pct}% // ${done} of ${total} topics`);
   }
   const bar=document.getElementById('progressBar');
   if(bar)bar.setAttribute('aria-valuenow',pct);
@@ -5105,9 +5109,14 @@ window.lockinSupabasePing = async function () {
   function setStatus(text,error=false){const n=$('liveShareStatus');if(!n)return;n.textContent=text||'';n.classList.toggle('error',error);}
   function snapshot(){
     const s=(typeof state!=='undefined'&&state)||{};
-    const active=(typeof activeSyllabus==='function'?activeSyllabus():syllabus)||[];
+    const allSyllabus=(typeof syllabus!=='undefined'&&syllabus)||[];
+    const archived=s.syllabusArchived||{};
+    const active=allSyllabus.filter(sec=>!archived[sec.title]);
     let total=0,done=0;const subjects=[];
-    active.forEach(sec=>{const items=Array.isArray(sec.items)?sec.items:[];let sd=0;items.forEach(x=>{total++;if(s.checked?.[x[0]]){done++;sd++;}});subjects.push({subject:sec.title,done:sd,total:items.length});});
+    // Spectators only receive unarchived subject rows. The headline percentage
+    // still reflects completion across the entire syllabus.
+    allSyllabus.forEach(sec=>{const items=Array.isArray(sec.items)?sec.items:[];items.forEach(x=>{total++;if(s.checked?.[x[0]])done++;});});
+    active.forEach(sec=>{const items=Array.isArray(sec.items)?sec.items:[];let sd=0;items.forEach(x=>{if(s.checked?.[x[0]])sd++;});subjects.push({subject:sec.title,done:sd,total:items.length});});
     const hw=Array.isArray(s.homework)?s.homework:[],hwDone=hw.filter(x=>x.done).length;
     const exam=typeof upcomingExam==='function'?upcomingExam():null;
     const mission=typeof getMission==='function'?getMission():null;
@@ -5149,7 +5158,7 @@ window.lockinSupabasePing = async function () {
     const subjects=(d.subjects||[]).map(x=>`<div class="liveProgressRow"><div><div class="liveProgressLabel">${esc(x.subject)}</div><div class="liveProgressTrack"><div class="liveProgressFill" style="width:${x.total?Math.round(x.done/x.total*100):0}%"></div></div></div><div class="liveProgressMeta">${x.done}/${x.total}</div></div>`).join('');
     const mission=d.mission?`<div class="liveQuest">${esc(d.mission.text)}</div><div class="liveQuestMeta">${esc(d.mission.subject)} // ${esc(d.mission.meta||'')} // ${esc(d.mission.source||'').toUpperCase()}</div>`:'<div class="liveQuest">QUEUE CLEARED</div><div class="liveQuestMeta">NO CURRENT TARGET</div>';
     const exam=d.exam?`${esc(d.exam.subject)} // ${esc(d.exam.date)}`:'NO UPCOMING EXAM';
-    viewerHTML(`<div class="liveViewerHeader"><div><div class="liveViewerKicker">LOCK IN // LIVE PROGRESS</div><div class="liveViewerTitle">${esc(d.owner||'LOCK IN')}</div><div class="liveViewerSub">READ-ONLY SPECTATOR MODE // NOTHING HERE CAN CHANGE THE MAIN ACCOUNT</div></div><div class="liveViewerLive">● LIVE</div></div><div class="liveViewerStats"><div class="liveViewerStat"><strong>${Number(d.level)||1}</strong><span>LEVEL</span></div><div class="liveViewerStat"><strong>${(Number(d.xp)||0).toLocaleString()}</strong><span>XP</span></div><div class="liveViewerStat"><strong>${Number(d.streak)||0}</strong><span>DAY STREAK</span></div><div class="liveViewerStat"><strong>${Number(d.syllabus?.pct)||0}%</strong><span>SYLLABUS</span></div></div><div class="liveViewerGrid"><section class="liveViewerPanel"><div class="liveViewerPanelHead">SYLLABUS // SUBJECT PROGRESS</div><div class="liveViewerPanelBody">${subjects||'<div class="liveViewerSub">NO ACTIVE SYLLABUS DATA.</div>'}</div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">CURRENT MISSION</div><div class="liveViewerPanelBody">${mission}<div class="liveQuestMeta" style="margin-top:15px">UPCOMING EXAM // ${exam}</div><div class="liveQuestMeta">DAILY XP // ${Number(d.dailyXp?.earned)||0}/${Number(d.dailyXp?.target)||300}</div></div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">HOMEWORK // READ ONLY</div><div class="liveViewerPanelBody"><div class="liveProgressTrack"><div class="liveProgressFill" style="width:${Number(d.homework?.pct)||0}%"></div></div><div class="liveQuestMeta">${Number(d.homework?.done)||0} / ${Number(d.homework?.total)||0} COMPLETE // ${Number(d.homework?.open)||0} OPEN</div></div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">ACHIEVEMENTS + WALLET</div><div class="liveViewerPanelBody"><div class="liveHwRow"><span>ACHIEVEMENTS</span><span>${Number(d.achievements?.done)||0}/${Number(d.achievements?.total)||0}</span></div><div class="liveHwRow"><span>COINS</span><span>${Number(d.coins)||0}</span></div></div></section></div><div class="liveViewerFooter">LAST UPDATED // ${new Date(d.updatedAt||Date.now()).toLocaleString()} // LIVE SHARE IS READ ONLY</div>`);
+    viewerHTML(`<div class="liveViewerHeader"><div><div class="liveViewerKicker">LOCK IN // LIVE PROGRESS</div><div class="liveViewerTitle">${esc(d.owner||'LOCK IN')}</div><div class="liveViewerSub">READ-ONLY SPECTATOR MODE // NOTHING HERE CAN CHANGE THE MAIN ACCOUNT</div></div><div class="liveViewerLive">● LIVE</div></div><div class="liveViewerStats"><div class="liveViewerStat"><strong>${Number(d.level)||1}</strong><span>LEVEL</span></div><div class="liveViewerStat"><strong>${(Number(d.xp)||0).toLocaleString()}</strong><span>XP</span></div><div class="liveViewerStat"><strong>${Number(d.streak)||0}</strong><span>DAY STREAK</span></div><div class="liveViewerStat"><strong>${Number(d.syllabus?.pct)||0}%</strong><span>SYLLABUS</span></div></div><div class="liveViewerGrid"><section class="liveViewerPanel"><div class="liveViewerPanelHead">SYLLABUS // SUBJECT PROGRESS</div><div class="liveViewerPanelBody">${subjects||'<div class="liveViewerSub">ALL SYLLABUS SECTIONS ARE ARCHIVED // NOTHING ACTIVE TO DISPLAY.</div>'}</div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">CURRENT MISSION</div><div class="liveViewerPanelBody">${mission}<div class="liveQuestMeta" style="margin-top:15px">UPCOMING EXAM // ${exam}</div><div class="liveQuestMeta">DAILY XP // ${Number(d.dailyXp?.earned)||0}/${Number(d.dailyXp?.target)||300}</div></div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">HOMEWORK // READ ONLY</div><div class="liveViewerPanelBody"><div class="liveProgressTrack"><div class="liveProgressFill" style="width:${Number(d.homework?.pct)||0}%"></div></div><div class="liveQuestMeta">${Number(d.homework?.done)||0} / ${Number(d.homework?.total)||0} COMPLETE // ${Number(d.homework?.open)||0} OPEN</div></div></section><section class="liveViewerPanel"><div class="liveViewerPanelHead">ACHIEVEMENTS + WALLET</div><div class="liveViewerPanelBody"><div class="liveHwRow"><span>ACHIEVEMENTS</span><span>${Number(d.achievements?.done)||0}/${Number(d.achievements?.total)||0}</span></div><div class="liveHwRow"><span>COINS</span><span>${Number(d.coins)||0}</span></div></div></section></div><div class="liveViewerFooter">LAST UPDATED // ${new Date(d.updatedAt||Date.now()).toLocaleString()} // LIVE SHARE IS READ ONLY</div>`);
   }
   async function viewerBoot(){
     if(!client()){viewerHTML('<div class="liveViewerError"><div class="liveViewerErrorBox"><strong>LIVE VIEW UNAVAILABLE</strong><p>Supabase is not configured on this build.</p></div></div>');return;}
