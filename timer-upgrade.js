@@ -38,6 +38,20 @@
   };
   let interval=null;
   function fmt(sec){sec=Math.max(0,Math.floor(sec));const m=Math.floor(sec/60),s=sec%60;return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
+  function injectStyles(){
+    if(document.getElementById('lockinTimerUpgradeStyles'))return;
+    const style=document.createElement('style');style.id='lockinTimerUpgradeStyles';style.textContent=`
+      .smartTimerUpgrade{margin-top:14px;padding:13px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,var(--soft),rgba(255,255,255,.012));box-shadow:0 12px 30px rgba(0,0,0,.18);animation:lockinTimerIn .35s var(--ui-ease,cubic-bezier(.2,.8,.2,1)) both}
+      @keyframes lockinTimerIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+      .smartTimerHead{display:flex;align-items:center;justify-content:space-between;gap:10px}.smartTimerHead strong{display:block;margin-top:3px;color:var(--orange2);font:800 18px "Space Grotesk",sans-serif}.smartTimerBadge{border:1px solid var(--line);border-radius:999px;padding:4px 7px;color:var(--orange);font:800 7px "DM Mono",monospace;letter-spacing:.1em}
+      .smartTimerPresets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.smartPresetBtn{min-width:0;padding:7px 4px!important;font-size:8px!important}.smartPresetBtn.active{background:var(--soft);border-color:var(--orange);color:var(--orange2);box-shadow:0 0 13px var(--soft)}
+      .smartTimerDisplay{text-align:center;margin-top:12px;color:var(--text);font:700 38px/1 "Space Grotesk",sans-serif;letter-spacing:-.06em;font-variant-numeric:tabular-nums;text-shadow:0 0 20px var(--soft)}.smartTimerPhase{text-align:center;margin-top:4px;color:var(--muted);font:800 7px "DM Mono",monospace;letter-spacing:.18em}.smartTimerActions{display:flex;justify-content:center;gap:7px;margin-top:9px}.smartTimerActions .btn{min-width:92px}
+      .smartStopwatch{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:13px;padding:10px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.015)}.smartStopwatch span{display:block;color:var(--muted);font:800 7px "DM Mono",monospace;letter-spacing:.12em}.smartStopwatch strong{display:block;margin-top:3px;color:var(--orange2);font:800 18px "Space Grotesk",sans-serif;font-variant-numeric:tabular-nums}.smartStopwatchActions{display:flex;gap:6px}.smartStopwatchActions .btn{font-size:8px;padding:7px 8px}.smartTimerHint{margin-top:9px;color:var(--muted);font:700 7px/1.45 "DM Mono",monospace;letter-spacing:.03em}.smartStopwatchStats{margin-top:6px;color:var(--orange);font:800 7px "DM Mono",monospace;letter-spacing:.08em}
+      .smartTimerUpgrade:has(.smartPresetBtn.active) .smartTimerDisplay{animation:lockinTimerGlow 2.6s ease-in-out infinite}@keyframes lockinTimerGlow{50%{text-shadow:0 0 28px var(--soft);transform:scale(1.012)}}
+      @media(max-width:600px){.smartTimerPresets{grid-template-columns:repeat(2,1fr)}.smartStopwatch{align-items:flex-start;flex-direction:column}.smartStopwatchActions{width:100%}.smartStopwatchActions .btn{flex:1}}
+      @media(prefers-reduced-motion:reduce){.smartTimerUpgrade,.smartTimerUpgrade .smartTimerDisplay{animation:none!important}}
+    `;document.head.appendChild(style);
+  }
   function ensureUI(){
     if(document.getElementById('smartPomodoroPanel'))return;
     const timerSide=document.querySelector('.timerSide'); if(!timerSide)return;
@@ -80,6 +94,6 @@
     if(sw)sw.textContent=s.timerUpgrade.stopwatchRunning?fmt(Math.floor((Date.now()-s.timerUpgrade.stopwatchStartedAt)/1000)):'00:00';if(swb)swb.textContent=s.timerUpgrade.stopwatchRunning?'STOP & REWARD':'START';
     document.querySelectorAll('.smartPresetBtn').forEach(b=>b.classList.toggle('active',b.dataset.preset===p.id));
   }
-  function install(){ensureUI();if(interval)return;interval=setInterval(tick,1000);render();}
+  function install(){injectStyles();ensureUI();if(interval)return;interval=setInterval(tick,1000);render();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,350),{once:true});else setTimeout(install,350);
 })();
