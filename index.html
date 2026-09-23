@@ -1631,8 +1631,6 @@ body.exam-mode .devBreakOverlay{display:none}
 #missionPanel,#achievementsPanel{scroll-margin-top:18px}
 #missionPanel{box-shadow:0 0 0 1px var(--line),0 18px 40px rgba(0,0,0,.22)}
 #achievementsPanel{box-shadow:0 0 0 1px var(--line),0 14px 34px rgba(0,0,0,.20)}
-.examPaper.archived{opacity:.38}
-.examPaper.archived b,.examPaper.archived span{color:var(--muted)}
 @media(max-width:700px){
   .coreJumpBar{grid-template-columns:1fr 1fr}
   .coreJumpTitle{grid-column:1/-1;min-height:20px;padding:2px 5px}
@@ -2847,7 +2845,7 @@ const syllabus=[
  {title:'INFORMATION TECHNOLOGY — PART A',items:[['it-a1','Chapter 1 — Communication Skills','MEDIUM'],['it-a2','Chapter 2 — Self-Management Skills','MEDIUM'],['it-a3','Chapter 3 — Information and Communication Technology Skills','MEDIUM'],['it-a4','Chapter 4 — Entrepreneurship Skills','MEDIUM']]},
  {title:'INFORMATION TECHNOLOGY — PART B',items:[['it-b1','Chapter 1 — Introduction to IT – ITeS Industry','EASY'],['it-b2','Chapter 2 — Data Entry and Keyboarding Skills','EASY'],['it-b3','Chapter 3 — Digital Documentation','EASY']]}
 ];
-let state=JSON.parse(localStorage.getItem(STORAGE)||'{}'); state.checked ||= {}; state.todos ||= []; state.rounds ||= 0; state.sessions ||= []; state.xp=Number.isFinite(Number(state.xp))?Number(state.xp):0; state.xpAwards ||= {}; state.todoXpAwards ||= {}; state.dailyXp ||= {date:'',earned:0,target:300,bonusClaimed:false}; state.settings={sound:true,autoStart:false,...(state.settings||{})}; delete state.settings.ambientStyle;delete state.settings.ambientVolume;delete state.settings.ambient; state.priorities ||= ['', '', '']; state.deadline ||= '2026-09-21'; state.pomoTask ||= ''; state.currentTask ||= ''; state.mission ||= {date:'',id:'',rerolls:0,exam:'',examDate:''}; state.missionHistory ||= []; state.revisionAwards ||= {}; state.revisionLog ||= []; state.coins=Number.isFinite(Number(state.coins))?Number(state.coins):0; state.coinAwards ||= {}; state.streakEconomy ||= {shields:0,usedDates:[]}; state.streakEconomy.shields=Math.max(0,Math.min(3,Number(state.streakEconomy.shields)||0)); state.streakEconomy.usedDates=Array.isArray(state.streakEconomy.usedDates)?state.streakEconomy.usedDates:[]; state.streakEconomy.emergencyPasses=Number(state.streakEconomy.emergencyPasses)||0; state.homework ||= []; state.homeworkAwards ||= {}; state.homeworkImports ||= []; state.shop ||= {}; state.shop.boosts ||= {xp:0,revision:0,focus:0}; state.shop.cosmetics ||= {unlocked:['cyber-green'],equipped:'cyber-green'}; if(!Array.isArray(state.shop.cosmetics.unlocked)||!state.shop.cosmetics.unlocked.includes('cyber-green'))state.shop.cosmetics.unlocked=['cyber-green',...(Array.isArray(state.shop.cosmetics.unlocked)?state.shop.cosmetics.unlocked:[])]; state.shop.cosmetics.equipped ||= 'cyber-green'; state.timer ||= {mode:'focus',remaining:1500,running:false,endAt:0}; document.documentElement.dataset.skin=state.shop.cosmetics.equipped||'cyber-green';
+let state=JSON.parse(localStorage.getItem(STORAGE)||'{}'); state.checked ||= {}; state.autoExamApplied ||= {}; state.todos ||= []; state.rounds ||= 0; state.sessions ||= []; state.xp=Number.isFinite(Number(state.xp))?Number(state.xp):0; state.xpAwards ||= {}; state.todoXpAwards ||= {}; state.dailyXp ||= {date:'',earned:0,target:300,bonusClaimed:false}; state.settings={sound:true,autoStart:false,...(state.settings||{})}; delete state.settings.ambientStyle;delete state.settings.ambientVolume;delete state.settings.ambient; state.priorities ||= ['', '', '']; state.deadline ||= '2026-09-21'; state.pomoTask ||= ''; state.currentTask ||= ''; state.mission ||= {date:'',id:'',rerolls:0,exam:'',examDate:''}; state.missionHistory ||= []; state.revisionAwards ||= {}; state.revisionLog ||= []; state.coins=Number.isFinite(Number(state.coins))?Number(state.coins):0; state.coinAwards ||= {}; state.streakEconomy ||= {shields:0,usedDates:[]}; state.streakEconomy.shields=Math.max(0,Math.min(3,Number(state.streakEconomy.shields)||0)); state.streakEconomy.usedDates=Array.isArray(state.streakEconomy.usedDates)?state.streakEconomy.usedDates:[]; state.streakEconomy.emergencyPasses=Number(state.streakEconomy.emergencyPasses)||0; state.homework ||= []; state.homeworkAwards ||= {}; state.homeworkImports ||= []; state.shop ||= {}; state.shop.boosts ||= {xp:0,revision:0,focus:0}; state.shop.cosmetics ||= {unlocked:['cyber-green'],equipped:'cyber-green'}; if(!Array.isArray(state.shop.cosmetics.unlocked)||!state.shop.cosmetics.unlocked.includes('cyber-green'))state.shop.cosmetics.unlocked=['cyber-green',...(Array.isArray(state.shop.cosmetics.unlocked)?state.shop.cosmetics.unlocked:[])]; state.shop.cosmetics.equipped ||= 'cyber-green'; state.timer ||= {mode:'focus',remaining:1500,running:false,endAt:0}; document.documentElement.dataset.skin=state.shop.cosmetics.equipped||'cyber-green';
 let timer={mode:state.timer.mode||'focus',running:false,seconds:1500,startedAt:0,remaining:Number(state.timer.remaining)||1500,interval:null};
 if(state.timer.running && Number(state.timer.endAt)>Date.now()){timer.running=true;timer.remaining=Math.ceil((Number(state.timer.endAt)-Date.now())/1000);}else{state.timer.running=false;state.timer.endAt=0;save();}
 const durations={focus:1500,short:300,long:900,stopwatch:0};
@@ -2881,15 +2879,33 @@ function isSectionArchived(title, now=new Date()){
   today.setHours(0,0,0,0);
   return today>=examDayObj(row[0]);
 }
-function activeSyllabus(){
-  return syllabus.filter(sec=>!isSectionArchived(sec.title));
+function syncCompletedExamChecks(){
+  const today=new Date();
+  today.setHours(0,0,0,0);
+  state.autoExamApplied ||= {};
+  let changed=false;
+
+  examSchedule.forEach(([date,subject])=>{
+    if(examDayObj(date)>today || state.autoExamApplied[subject]) return;
+
+    syllabus
+      .filter(sec=>examSubjectForSectionTitle(sec.title)===subject)
+      .forEach(sec=>sec.items.forEach(([id])=>{
+        if(!state.checked[id]){
+          state.checked[id]=true;
+          changed=true;
+        }
+      }));
+
+    state.autoExamApplied[subject]=true;
+  });
+
+  if(changed) save();
+  return changed;
 }
-function markArchiveRefresh(){
-  const stamp=localDayKey();
-  if(state.archiveStamp!==stamp){
-    state.archiveStamp=stamp;
-    save();
-  }
+
+function activeSyllabus(){
+  return syllabus;
 }
 
 function save(){localStorage.setItem(STORAGE,JSON.stringify(state));}
@@ -3248,10 +3264,10 @@ function renderMission(){
   const reason=exam&&!isHomework?`${exam.subject} is the first future exam with unfinished work. ${studyDays} study day${studyDays===1?'':'s'} remain, with ${examItems.length} open topic${examItems.length===1?'':'s'} in that exact exam scope. The engine now weights exam urgency, workload per remaining study day, difficulty, priority, section coverage, daily XP fit, and recent-mission repetition before selecting this target.`:isHomework?`PT-2 exam scope is clear, so Smart Quest is using your imported homework queue. ${mission.task?.due?homeworkDueLabel(mission.task.due)+'. ':''}Priority, deadline urgency, effort, daily XP fit, and recent repeats are driving this target.`:`This target is selected from your strongest remaining open work using difficulty, coverage, daily XP fit, recent repeats, and workload pressure.`;
   document.getElementById('missionStatus').textContent=isHomework?'HOMEWORK MODE':state.mission?.rerolls?'REROLLED // EXAM-LOCKED':'EXAM-LOCKED TARGET';document.getElementById('missionName').textContent=mission.text;document.getElementById('missionSubject').textContent=mission.subject;document.getElementById('missionDifficulty').textContent=mission.meta;document.getElementById('missionReward').textContent=`+${reward} XP`;document.getElementById('missionEstimate').textContent=`~${estimate} FOCUS`;document.getElementById('missionReason').textContent=reason;document.getElementById('missionOpen').textContent=open;document.getElementById('missionSubjectProgress').textContent=`${stats.done}/${stats.total}`;document.getElementById('missionProgressFill').style.width=(stats.total?stats.done/stats.total*100:0)+'%';document.getElementById('missionStart').disabled=false;document.getElementById('missionDone').disabled=false;document.getElementById('missionReroll').disabled=false;panel.dataset.missionId=mission.id;
 }
-function renderDaily(openCount){document.querySelectorAll('.priorityInput').forEach((input,i)=>{if(document.activeElement!==input)input.value=state.priorities[i]||''});const streak=studyStreak();document.getElementById('streakNum').textContent=streak;document.getElementById('streakBadge').textContent=streak+' DAY STREAK';const date=document.getElementById('deadlineInput');if(document.activeElement!==date)date.value=state.deadline||'';const result=document.getElementById('deadlineResult');const today=new Date();today.setHours(0,0,0,0);const next=upcomingExam();const list=document.getElementById('examSchedule');list.innerHTML=examSchedule.map(([d,subject])=>{const isNext=next&&d===next.date;const dd=examDayObj(d);const today0=new Date();today0.setHours(0,0,0,0);const archived=dd<=today0;const label=new Date(d+'T00:00:00').toLocaleDateString(undefined,{day:'2-digit',month:'short'}).toUpperCase();return `<div class="examPaper ${isNext?'next':''} ${archived?'archived':''}"><b>${subject}</b><span>${label}${isNext?' // NEXT':''}${archived?' // ARCHIVED':''}</span></div>`}).join('');renderMission();if(!state.deadline){result.textContent='SET YOUR PT-2 DATE TO PLAN THE PUSH.';document.getElementById('examCountdownNum').textContent='--';document.getElementById('examCountdownSub').textContent='SET AN EXAM DATE';return}const examDate=new Date(state.deadline+'T00:00:00');const calendarDays=Math.ceil((examDate-today)/86400000);const studyDays=Math.max(0,calendarDays-1);const target=state.deadline==='2026-09-21'?'SCIENCE':(next?.subject||'YOUR TARGET');document.getElementById('nextExamLabel').textContent=`NEXT EXAM // ${target}`;document.getElementById('examCountdownNum').textContent=calendarDays<0?'PASSED':calendarDays===0?'TODAY':`${studyDays} STUDY DAY${studyDays===1?'':'S'}`;document.getElementById('examCountdownSub').textContent=calendarDays<0?'SET YOUR NEXT TARGET':calendarDays===0?'NO STUDY DAY LEFT // EXAM DAY':`EXAM IN ${calendarDays} DAY${calendarDays===1?'':'S'} // EXAM DAY NOT COUNTED`;if(calendarDays<0){result.textContent='THE DATE HAS PASSED — SET YOUR NEXT TARGET.'}else if(calendarDays===0){result.textContent='IT’S EXAM DAY. YOUR STUDY WINDOW ENDS BEFORE TODAY.'}else{const perDay=Math.max(1,Math.ceil(openCount/Math.max(1,studyDays)));result.textContent=`${studyDays} STUDY DAY${studyDays===1?'':'S'} LEFT FOR ${target} // AIM FOR ~${perDay} OPEN TOPIC${perDay===1?'':'S'} A DAY.`}}
+function renderDaily(openCount){document.querySelectorAll('.priorityInput').forEach((input,i)=>{if(document.activeElement!==input)input.value=state.priorities[i]||''});const streak=studyStreak();document.getElementById('streakNum').textContent=streak;document.getElementById('streakBadge').textContent=streak+' DAY STREAK';const date=document.getElementById('deadlineInput');if(document.activeElement!==date)date.value=state.deadline||'';const result=document.getElementById('deadlineResult');const today=new Date();today.setHours(0,0,0,0);const next=upcomingExam();const list=document.getElementById('examSchedule');list.innerHTML=examSchedule.map(([d,subject])=>{const isNext=next&&d===next.date;const dd=examDayObj(d);const today0=new Date();today0.setHours(0,0,0,0);const completed=dd<=today0;const label=new Date(d+'T00:00:00').toLocaleDateString(undefined,{day:'2-digit',month:'short'}).toUpperCase();return '<div class="examPaper '+(isNext?'next':'')+'"><b>'+subject+'</b><span>'+label+(isNext?' // NEXT':'')+(completed?' // COMPLETED':'')+'</span></div>'}).join('');renderMission();if(!state.deadline){result.textContent='SET YOUR PT-2 DATE TO PLAN THE PUSH.';document.getElementById('examCountdownNum').textContent='--';document.getElementById('examCountdownSub').textContent='SET AN EXAM DATE';return}const examDate=new Date(state.deadline+'T00:00:00');const calendarDays=Math.ceil((examDate-today)/86400000);const studyDays=Math.max(0,calendarDays-1);const target=state.deadline==='2026-09-21'?'SCIENCE':(next?.subject||'YOUR TARGET');document.getElementById('nextExamLabel').textContent=`NEXT EXAM // ${target}`;document.getElementById('examCountdownNum').textContent=calendarDays<0?'PASSED':calendarDays===0?'TODAY':`${studyDays} STUDY DAY${studyDays===1?'':'S'}`;document.getElementById('examCountdownSub').textContent=calendarDays<0?'SET YOUR NEXT TARGET':calendarDays===0?'NO STUDY DAY LEFT // EXAM DAY':`EXAM IN ${calendarDays} DAY${calendarDays===1?'':'S'} // EXAM DAY NOT COUNTED`;if(calendarDays<0){result.textContent='THE DATE HAS PASSED — SET YOUR NEXT TARGET.'}else if(calendarDays===0){result.textContent='IT’S EXAM DAY. YOUR STUDY WINDOW ENDS BEFORE TODAY.'}else{const perDay=Math.max(1,Math.ceil(openCount/Math.max(1,studyDays)));result.textContent=`${studyDays} STUDY DAY${studyDays===1?'':'S'} LEFT FOR ${target} // AIM FOR ~${perDay} OPEN TOPIC${perDay===1?'':'S'} A DAY.`}}
 function showTaskMenu(event,text){event.preventDefault();const menu=document.getElementById('contextMenu');menu.dataset.task=text;menu.style.left=Math.min(event.clientX,window.innerWidth-220)+'px';menu.style.top=Math.min(event.clientY,window.innerHeight-100)+'px';menu.classList.add('show')}
 function update(){
-  markArchiveRefresh();
+  syncCompletedExamChecks();
   let total=0,done=0;
   const totals={easy:0,medium:0,hard:0,optional:0},completed={easy:0,medium:0,hard:0,optional:0};
   activeSyllabus().forEach(sec=>sec.items.forEach(([id,,meta])=>{
@@ -3441,7 +3457,7 @@ document.getElementById('bottomPortabilityBtn').onclick=()=>openUtilityDetail('p
 document.getElementById('addTodo').onclick=addTodo;document.getElementById('todoInput').addEventListener('keydown',e=>{if(e.key==='Enter')addTodo()});
 function setFilter(mode){window.filterMode=mode;document.querySelectorAll('#showAll,#showOpen,#showDone').forEach(button=>button.classList.toggle('active-filter',button.id==='show'+mode[0].toUpperCase()+mode.slice(1)));renderSyllabus()}
 document.getElementById('search').addEventListener('input',renderSyllabus);document.getElementById('showAll').onclick=()=>setFilter('all');document.getElementById('showOpen').onclick=()=>setFilter('open');document.getElementById('showDone').onclick=()=>setFilter('done');
-document.getElementById('checkAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=true));save();update()};document.getElementById('uncheckAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=false));save();update()};document.getElementById('resetProgress').onclick=()=>{if(confirm('Reset all syllabus progress?')){state.checked={};state.missionHistory=[];state.mission={date:'',id:'',rerolls:0,exam:'',examDate:''};state.revisionAwards={};state.revisionLog=[];save();update()}};
+document.getElementById('checkAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=true));save();update()};document.getElementById('uncheckAll').onclick=()=>{activeSyllabus().forEach(s=>s.items.forEach(([id])=>state.checked[id]=false));save();update()};document.getElementById('resetProgress').onclick=()=>{if(confirm('Reset all syllabus progress?')){state.checked={};state.autoExamApplied={};state.missionHistory=[];state.mission={date:'',id:'',rerolls:0,exam:'',examDate:''};state.revisionAwards={};state.revisionLog=[];save();update()}};
 
 
 /* Step 13 — compact encrypted progress portability */
@@ -3979,17 +3995,11 @@ if(timer.running){timer.interval=setInterval(()=>{timer.remaining=Math.max(0,Mat
 
 
 <script>
-(function updateArchiveNotice(){
+(function updateExamCheckNotice(){
   const notice=document.getElementById("syllabusArchiveText");
   if(!notice || typeof activeSyllabus!=="function") return;
-  const active=activeSyllabus().length;
-  const total=typeof syllabus!=="undefined" ? syllabus.length : active;
-  const archived=Math.max(0,total-active);
-  notice.textContent=archived
-    ? `${archived} COMPLETED EXAM SECTION${archived===1?"":"S"} ARCHIVED // ACTIVE SYLLABUS AUTO-FILTERED`
-    : "EXAM ARCHIVE ACTIVE // COMPLETED PAPERS WILL LEAVE THE ACTIVE SYLLABUS AUTOMATICALLY.";
-})();
-</script>
+  notice.textContent="COMPLETED EXAMS AUTO-CHECK THEIR SYLLABUS // NO XP OR COINS FROM AUTO-CHECKS // YOU CAN UNCHECK ANY BOX LATER.";
+})();</script>
 
 
 <script>
